@@ -24,9 +24,19 @@ public class LongMapImpl<V> implements LongMap<V> {
             currentCapacity = currentCapacity + (int) (currentCapacity * LOAD_FACTOR) + 1;
             resize(currentCapacity);
         }
+
         final int hash = hash(key);
-        table[indexOf(hash, currentCapacity)] = new CustomMapEntry<>(key, value);
-        // TODO collisions
+        CustomMapEntry<V> collisionNode = table[indexOf(hash, currentCapacity)];
+        if (Objects.nonNull(collisionNode)) {
+            CustomMapEntry<V> latestChainNode = collisionNode;
+            while (Objects.nonNull(latestChainNode.nextElement)) {
+                latestChainNode = latestChainNode.nextElement;
+            }
+            latestChainNode.nextElement = new CustomMapEntry<>(key, value, null);
+        } else {
+            table[indexOf(hash, currentCapacity)] = new CustomMapEntry<>(key, value, null);
+        }
+
         this.currentSize++;
         return value;
     }
@@ -34,10 +44,28 @@ public class LongMapImpl<V> implements LongMap<V> {
     public V get(long key) {
         final int hash = hash(key);
         final int entryIndex = indexOf(hash, currentCapacity);
-        if (entryIndex > table.length) {
+        if (entryIndex > table.length || Objects.isNull(table[entryIndex])) {
             return null;
         }
-        return Objects.isNull(table[entryIndex]) ? null : (V) table[entryIndex].value;
+        return getEntry(entryIndex, key);
+    }
+
+    private V getEntry(int entryIndex, long key) {
+        CustomMapEntry<V> firstEntry = table[entryIndex];
+        if (Objects.isNull(firstEntry.nextElement)) {
+            return firstEntry.value;
+        }
+
+        CustomMapEntry<V> latestChainNode = firstEntry;
+
+        while (Objects.nonNull(latestChainNode.nextElement)) {
+            latestChainNode = latestChainNode.nextElement;
+            if (latestChainNode.key == key) {
+                return latestChainNode.value;
+            }
+        }
+
+        return null;
     }
 
     public V remove(long key) {
@@ -74,9 +102,10 @@ public class LongMapImpl<V> implements LongMap<V> {
     }
 
     public V[] values() {
-        return (V[]) Arrays.stream(table)
+        Object[] values = Arrays.stream(table)
                 .filter(Objects::nonNull)
                 .map(entry -> entry.value).toArray();
+        return (V[]) Arrays.copyOf(values, table.length, Object[].class);
     }
 
     public long size() {
@@ -108,10 +137,12 @@ public class LongMapImpl<V> implements LongMap<V> {
     static class CustomMapEntry<V> {
         Long key;
         V value;
+        CustomMapEntry<V> nextElement;
 
-        CustomMapEntry(Long key, V value) {
+        CustomMapEntry(Long key, V value, CustomMapEntry<V> nextElement) {
             this.key = key;
             this.value = value;
+            this.nextElement = nextElement;
         }
     }
 }
